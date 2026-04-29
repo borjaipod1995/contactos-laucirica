@@ -201,6 +201,7 @@ window._db   = firebase.database();
     <button class="vbtn" id="btn-map" onclick="setView('map')">🗺 Mapa</button>
   </div>
   <span class="res-count" id="res-count">2.404 resultados</span>
+  <button class="btn btn-accent" onclick="openAddModal()">＋ Añadir empresa</button>
   <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV</button>
 </div>
 
@@ -255,6 +256,7 @@ function startSync(){
     extra = snap.val() || {};
     render();
   });
+  startCustomSync();
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -354,10 +356,18 @@ function setExtra(idx, field, val){
 function filter(){
   const q = document.getElementById('search').value.trim().toLowerCase();
   const cp_filter = document.getElementById('f-pais').value;
-  filtered = D.map((r,i)=>({r,i})).filter(({r,i})=>{
+  // Base dataset: RAW + custom companies
+  const base = [
+    ...D.map((r,i)=>({r,i,isCustom:false})),
+    ...customCompanies.map((c,i)=>({
+      r:[c.nombre,c.tel||'',c.email||'',c.ciudad||'',c.pais||''],
+      i:'c_'+c._key, isCustom:true, _key:c._key, _c:c
+    }))
+  ];
+  filtered = base.filter(({r,i,isCustom,_c})=>{
     if(cp_filter && r[4] !== cp_filter) return false;
     if(q){
-      const ex = getExtra(i);
+      const ex = isCustom ? {cp:_c?.cp||'',contacto:_c?.contacto||''} : getExtra(i);
       const hay = (r[0]+r[1]+r[2]+r[3]+r[4]+(ex.cp||'')+(ex.contacto||'')).toLowerCase();
       if(!hay.includes(q)) return false;
     }
@@ -386,29 +396,36 @@ function render(){
   if(!slice.length){ tbody.innerHTML=''; empty.style.display=''; renderPager(); return; }
   empty.style.display = 'none';
 
-  tbody.innerHTML = slice.map(({r,i}) => {
-    const ex = getExtra(i);
+  tbody.innerHTML = slice.map(({r,i,isCustom,_key,_c}) => {
+    const ex = isCustom ? {cp:_c?.cp||'',contacto:_c?.contacto||''} : getExtra(i);
     const tel = r[1]||'';
     const email = r[2]||'';
+    const customTag = isCustom ? '<span class="custom-tag">NUEVO</span>' : '';
+    const idStr = isCustom ? `'c_${_key}'` : i;
     return `<tr>
       <td>
-        <div class="c-name">${r[0]}</div>
-        <input class="editable c-contact" value="${ex.contacto||''}" placeholder="+ Nombre contacto"
-          onchange="setExtra(${i},'contacto',this.value)" title="Nombre del contacto">
+        <div class="c-name">${r[0]}${customTag}</div>
+        ${isCustom
+          ? `<div class="c-contact" style="font-size:11px;color:var(--blue)">${ex.contacto||''}</div>`
+          : `<input class="editable c-contact" value="${ex.contacto||''}" placeholder="+ Nombre contacto" onchange="setExtra(${i},'contacto',this.value)">`
+        }
       </td>
       <td><div class="c-tel">${tel||'—'}</div></td>
       <td class="col-email"><div class="c-email">${email?`<a href="mailto:${email}">${email}</a>`:'—'}</div></td>
       <td>
         <div class="c-city">${r[3]||'—'}</div>
-        <input class="editable c-cp" value="${ex.cp||''}" placeholder="+ Código postal"
-          onchange="setExtra(${i},'cp',this.value)" title="Código postal">
+        ${isCustom
+          ? `<div class="c-cp">${ex.cp||''}</div>`
+          : `<input class="editable c-cp" value="${ex.cp||''}" placeholder="+ Código postal" onchange="setExtra(${i},'cp',this.value)">`
+        }
       </td>
       <td class="col-country"><span class="c-country">${r[4]||'—'}</span></td>
       <td>
         <div class="row-actions">
           ${tel?`<button class="ra ra-call" onclick="window.location='tel:${tel}'">📞</button>`:''}
           ${email?`<button class="ra ra-mail" onclick="window.location='mailto:${email}'">✉</button>`:''}
-          <button class="ra ra-map" onclick="locateOnMap(${i})" title="Ver en mapa">📍</button>
+          <button class="ra ra-map" onclick="locateOnMap(${idStr})" title="Ver en mapa">📍</button>
+          ${isCustom?`<button class="ra" style="background:#fdecea;color:#8b1a1a" onclick="openAddModal('${_key}')">✏</button><button class="ra" style="background:#fdecea;color:#8b1a1a" onclick="deleteCustom('${_key}')">🗑</button>`:''}
         </div>
       </td>
     </tr>`;
@@ -561,7 +578,15 @@ async function renderMap(){
 }
 
 async function locateOnMap(idx){
-  const r = D[idx];
+  let r;
+  if(typeof idx === 'string' && idx.startsWith('c_')){
+    const key = idx.replace('c_','');
+    const c = customCompanies.find(x=>x._key===key);
+    if(!c||!c.ciudad) return;
+    r = [c.nombre,c.tel||'',c.email||'',c.ciudad,c.pais||'España'];
+  } else {
+    r = D[idx];
+  }
   if(!r||!r[3]) return;
   setView('map');
   const coord = await geocodeCity(r[3], r[4]);
@@ -572,10 +597,90 @@ async function locateOnMap(idx){
   if(el){ el.classList.add('active'); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
 }
 
+
+// ── CUSTOM COMPANIES (Firebase global) ────────────────────────────────────
+let customCompanies = []; // [{nombre,tel,email,ciudad,pais,cp,contacto,addedBy,addedAt}]
+let editingCustomKey = null;
+
+function startCustomSync(){
+  window._db.ref('custom_companies').on('value', snap => {
+    const val = snap.val() || {};
+    customCompanies = Object.entries(val).map(([k,v])=>({...v, _key:k}));
+    filter();
+  });
+}
+
+function openAddModal(key){
+  editingCustomKey = key || null;
+  document.getElementById('modal-title').textContent = key ? '✏️ Editar empresa' : '➕ Añadir nueva empresa';
+  if(key){
+    const c = customCompanies.find(x=>x._key===key);
+    if(!c) return;
+    document.getElementById('f-nombre').value   = c.nombre||'';
+    document.getElementById('f-tel').value      = c.tel||'';
+    document.getElementById('f-email').value    = c.email||'';
+    document.getElementById('f-ciudad').value   = c.ciudad||'';
+    document.getElementById('f-cp').value       = c.cp||'';
+    document.getElementById('f-pais-new').value = c.pais||'España';
+    document.getElementById('f-contacto').value = c.contacto||'';
+  } else {
+    ['f-nombre','f-tel','f-email','f-ciudad','f-cp','f-contacto'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f-pais-new').value='España';
+  }
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function closeAddModal(e){
+  if(e && e.target !== document.getElementById('add-modal')) return;
+  document.getElementById('add-modal').classList.remove('open');
+  editingCustomKey = null;
+}
+
+function saveNewCompany(){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if(!nombre){ alert('El nombre es obligatorio'); return; }
+  const company = {
+    nombre,
+    tel:      document.getElementById('f-tel').value.trim(),
+    email:    document.getElementById('f-email').value.trim(),
+    ciudad:   document.getElementById('f-ciudad').value.trim(),
+    pais:     document.getElementById('f-pais-new').value,
+    cp:       document.getElementById('f-cp').value.trim(),
+    contacto: document.getElementById('f-contacto').value.trim(),
+    addedBy:  _fbUser ? (_fbUser.displayName||_fbUser.email) : 'unknown',
+    addedAt:  Date.now(),
+    isCustom: true,
+  };
+  if(editingCustomKey){
+    window._db.ref('custom_companies/'+editingCustomKey).update(company)
+      .then(()=>{ closeAddModal(); showToast('Empresa actualizada ✓'); })
+      .catch(e=>alert('Error: '+e.message));
+  } else {
+    window._db.ref('custom_companies').push(company)
+      .then(()=>{ closeAddModal(); showToast('Empresa añadida para todo el equipo ✓'); })
+      .catch(e=>alert('Error: '+e.message));
+  }
+}
+
+function deleteCustom(key){
+  if(!confirm('¿Eliminar esta empresa?')) return;
+  window._db.ref('custom_companies/'+key).remove()
+    .then(()=>showToast('Empresa eliminada'));
+}
+
+function showToast(msg){
+  let t = document.getElementById('_toast');
+  if(!t){ t=document.createElement('div'); t.id='_toast';
+    t.style.cssText='position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:var(--navy);color:white;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;transition:opacity .3s;pointer-events:none';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._to); t._to=setTimeout(()=>t.style.opacity='0',2500);
+}
+
 function exportCSV(){
   const hdr = ['Empresa','Contacto','Teléfono','Email','Ciudad','CP','País'];
-  const rows = filtered.map(({r,i})=>{
-    const ex = getExtra(i);
+  const rows = filtered.map(({r,i,isCustom,_c})=>{
+    const ex = isCustom ? {cp:_c?.cp||'',contacto:_c?.contacto||''} : getExtra(i);
     return [r[0],ex.contacto||'',r[1]||'',r[2]||'',r[3]||'',ex.cp||'',r[4]||''];
   });
   const csv = [hdr,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -586,5 +691,59 @@ function exportCSV(){
 
 // booted via onAuthStateChanged
 </script>
+
+<!-- ADD COMPANY MODAL -->
+<div class="modal-overlay" id="add-modal" onclick="closeAddModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hdr">
+      <h3 id="modal-title">➕ Añadir nueva empresa</h3>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Nombre empresa *</label>
+          <input class="form-input" id="f-nombre" placeholder="Ej: Bonfiglioli Ibérica, S.L."/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Teléfono</label>
+          <input class="form-input" id="f-tel" placeholder="944 000 000" type="tel"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" id="f-email" placeholder="info@empresa.com" type="email"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ciudad</label>
+          <input class="form-input" id="f-ciudad" placeholder="Bilbao"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Código postal</label>
+          <input class="form-input" id="f-cp" placeholder="48001"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">País</label>
+          <select class="form-select" id="f-pais-new">
+            <option value="España" selected>España</option>
+            <option value="Portugal">Portugal</option>
+            <option value="Francia">Francia</option>
+            <option value="Italia">Italia</option>
+            <option value="Alemania">Alemania</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre contacto</label>
+          <input class="form-input" id="f-contacto" placeholder="Ej: Juan García"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveNewCompany()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
