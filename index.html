@@ -182,22 +182,21 @@ tbody tr:hover .row-actions{opacity:1}
   .vb-pend.active{background:var(--muted);color:white;border-color:var(--muted)}
   
   /* ── NOTE MODAL ── */
-  .note-modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,30,60,.5);z-index:8000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+  .note-modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,30,60,.55);z-index:8000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
   .note-modal-overlay.open{opacity:1;pointer-events:all}
-  .note-modal{background:white;border-radius:16px;width:480px;max-width:94vw;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.25);transform:translateY(16px);transition:transform .2s}
+  .note-modal{background:white;border-radius:16px;width:540px;max-width:95vw;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.3);transform:translateY(20px);transition:transform .25s}
   .note-modal-overlay.open .note-modal{transform:translateY(0)}
-  .note-modal-head{background:var(--navy);padding:1.2rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;flex-shrink:0}
-  .note-modal-head h3{color:white;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px}
-  .note-modal-x{background:none;border:none;color:rgba(255,255,255,.6);font-size:22px;cursor:pointer}
+  .note-modal-head{background:var(--navy);padding:1.25rem 1.5rem;display:flex;align-items:flex-start;justify-content:space-between;border-radius:16px 16px 0 0;flex-shrink:0;border-bottom:2px solid var(--accent)}
+  .note-modal-x{background:none;border:none;color:rgba(255,255,255,.6);font-size:22px;cursor:pointer;line-height:1;flex-shrink:0;margin-left:12px}
   .note-modal-x:hover{color:white}
-  .note-modal-body{padding:1.5rem;display:flex;flex-direction:column;gap:12px}
-  .note-modal-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
-  .note-textarea{width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;font-family:'Inter',sans-serif;font-size:13px;color:var(--txt);outline:none;resize:vertical;min-height:120px;transition:border-color .15s;line-height:1.6}
-  .note-textarea:focus{border-color:var(--blue)}
+  .note-modal-body{display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+  .note-modal-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;background:#fafbfc;border-radius:0 0 16px 16px}
+  .note-textarea{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:'Inter',sans-serif;font-size:13px;color:var(--txt);outline:none;resize:vertical;transition:border-color .15s;line-height:1.7;background:white}
+  .note-textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,95,168,.1)}
   .note-date{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
   .note-indicator{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--blue);cursor:pointer;padding:2px 6px;border-radius:10px;background:var(--blue-lt)}
   .note-indicator:hover{background:#bfdbfe}
-  .visit-status-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+  .visit-status-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
   .vsb-visited{background:var(--green-lt);color:var(--green)}
   .vsb-pending{background:#fef3e2;color:#92400e}
   .vsb-no{background:var(--bg);color:var(--muted)}
@@ -1622,27 +1621,47 @@ doFilter();
 <!-- NOTE MODAL -->
 <div class="note-modal-overlay" id="note-modal" onclick="onNoteOverlayClick(event)">
   <div class="note-modal">
+
+    <!-- HEADER -->
     <div class="note-modal-head">
-      <h3 id="note-modal-title">Notas</h3>
+      <div style="display:flex;flex-direction:column;gap:2px;overflow:hidden">
+        <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em">Ficha de cliente</div>
+        <h3 id="note-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></h3>
+      </div>
       <button class="note-modal-x" onclick="closeNoteModal()">✕</button>
     </div>
-    <div class="note-modal-body">
-      <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:12px;font-weight:500;color:var(--muted)">Estado visita:</span>
-        <button class="visit-btn vb-yes" id="nm-visited" onclick="setNoteStatus('visited')">✅ Visitado</button>
-        <button class="visit-btn vb-no" id="nm-pending" onclick="setNoteStatus('pending')">⏳ Pendiente</button>
-        <button class="visit-btn vb-pend" id="nm-none" onclick="setNoteStatus('')">— Sin estado</button>
+
+    <!-- ESTADO DE VISITA -->
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);background:#fafbfc">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Estado de visita</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="visit-btn vb-yes" id="nm-visited" onclick="setNoteStatus('visited')" style="flex:1;justify-content:center;padding:10px 16px;font-size:13px">
+          ✅ Visitado
+        </button>
+        <button class="visit-btn vb-no" id="nm-pending" onclick="setNoteStatus('pending')" style="flex:1;justify-content:center;padding:10px 16px;font-size:13px">
+          ⏳ Pendiente de visita
+        </button>
+        <button class="visit-btn vb-pend" id="nm-none" onclick="setNoteStatus('')" style="flex:1;justify-content:center;padding:10px 16px;font-size:13px">
+          — Sin estado
+        </button>
       </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px">Notas</label>
-        <textarea class="note-textarea" id="note-textarea" placeholder="Escribe aquí tus notas sobre este cliente: contacto realizado, resultado de la visita, próximos pasos..."></textarea>
-      </div>
-      <div class="note-date" id="note-date"></div>
     </div>
+
+    <!-- NOTAS -->
+    <div class="note-modal-body" style="padding:1.25rem 1.5rem;flex:1">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">📝 Notas del cliente</div>
+      <textarea class="note-textarea" id="note-textarea"
+        placeholder="Escribe aquí: contacto realizado, resultado de la visita, quién atendió, próximos pasos, oportunidades detectadas..."
+        style="min-height:160px"></textarea>
+      <div class="note-date" id="note-date" style="margin-top:8px"></div>
+    </div>
+
+    <!-- FOOTER -->
     <div class="note-modal-foot">
       <button class="btn btn-ghost" onclick="closeNoteModal()">Cancelar</button>
-      <button class="btn btn-accent" onclick="saveNote()">💾 Guardar</button>
+      <button class="btn btn-accent" onclick="saveNote()" style="padding:9px 24px;font-size:13px">💾 Guardar</button>
     </div>
+
   </div>
 </div>
 
